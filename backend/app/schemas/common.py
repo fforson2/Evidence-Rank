@@ -17,9 +17,15 @@ EvidenceStatus = Literal[
 ]
 ReviewStatus = Literal["pending", "approved"]
 EventType = Literal["view", "like", "share", "evidence_open", "feed_mode_change"]
-DataOrigin = Literal["demo"]
+DataOrigin = Literal["demo", "model"]
 
 DEMO_DISCLAIMER = (
     "Demo data. These posts and evidence labels are fixtures for local development. "
     "They are not live fact-checks and were not produced by a model."
+)
+
+MODEL_DISCLAIMER = (
+    "Model output. A language model labeled each post from passages retrieved out of the "
+    "demo source corpus, and the published EvidenceRank formula turned those labels into "
+    "scores. Video posts are ranked from their captions. These labels are not human fact-checks."
 )

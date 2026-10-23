@@ -12,6 +12,62 @@ def client() -> TestClient:
     return TestClient(app)
 
 
+def test_model_rank_requires_an_api_key(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "openai_api_key", "")
+    response = client.post("/analysis/rank")
+    assert response.status_code == 503
+    assert response.json()["detail"]["error"] == "not_configured"
+
+
+def test_model_rank_route_returns_formula_scores(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.data.fixtures import POSTS
+    from app.schemas.common import MODEL_DISCLAIMER
+    from app.schemas.evidence import Claim, EvidenceExplanation
+    from app.services.ranking import rank_posts
+
+    class StubPipeline:
+        def rank_feed(self, posts):
+            labeled = [
+                post.model_copy(update={"evidence_status": "supported", "review_status": "approved"})
+                for post in posts
+            ]
+            ranked = rank_posts(labeled, "evidence")
+            explanations = [
+                EvidenceExplanation(
+                    post_id=post.id,
+                    data_origin="model",
+                    disclaimer=MODEL_DISCLAIMER,
+                    claims=[
+                        Claim(
+                            id=f"{post.id}-model",
+                            text=post.content,
+                            evidence_status="supported",
+                            review_status="approved",
+                            explanation="Stub label.",
+                            sources=[],
+                        )
+                    ],
+                )
+                for post in ranked
+            ]
+            return ranked, explanations
+
+    monkeypatch.setattr("app.routers.analysis.default_pipeline", lambda: StubPipeline())
+    response = client.post("/analysis/rank")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data_origin"] == "model"
+    assert body["mode"] == "evidence"
+    assert [post["id"] for post in body["posts"]] == [post.id for post in rank_posts(
+        [post.model_copy(update={"evidence_status": "supported", "review_status": "approved"}) for post in POSTS],
+        "evidence",
+    )]
+    assert body["posts"][0]["evidence_adjustment"] == pytest.approx(0.2)
+    assert len(body["explanations"]) == len(body["posts"])
+
+
 def test_health(client: TestClient) -> None:
     response = client.get("/health")
     assert response.status_code == 200
