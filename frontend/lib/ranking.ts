@@ -1,37 +1,38 @@
 import type { FeedMode, Post, RankedPost } from "@/types";
 
 /**
- * Mirror of backend/app/services/ranking.py.
- * Used only when the API is unreachable. Connected sessions display the API scores.
+ * EvidenceRank adds a bonus or subtracts a reviewed penalty from the engagement score.
+ * Engagement mode uses the engagement score alone.
+ * Unverified claims, opinions, and posts that have not been reviewed stay unchanged.
  */
 export const LIKE_WEIGHT = 1;
 export const SHARE_WEIGHT = 2.5;
-export const SUPPORTED_BOOST = 0.2;
-export const MISSING_CONTEXT_PENALTY = 0.1;
-export const SOURCE_MISMATCH_PENALTY = 0.25;
-export const CONTRADICTED_PENALTY = 0.35;
+export const EVIDENCE_BONUS = 25;
+export const CONTRADICTED_PENALTY = 50;
+export const SOURCE_MISMATCH_PENALTY = 25;
+export const MISSING_CONTEXT_PENALTY = 10;
 
 function roundScore(value: number): number {
   return Math.round(value * 10000) / 10000;
 }
 
-function evidenceAdjustment(post: Post): number {
+export function evidenceTerms(post: Post): { bonus: number; penalty: number } {
   if (post.review_status !== "approved") {
-    return 0;
+    return { bonus: 0, penalty: 0 };
   }
 
   switch (post.evidence_status) {
     case "supported":
-      return SUPPORTED_BOOST;
-    case "missing_context":
-      return -MISSING_CONTEXT_PENALTY;
-    case "source_mismatch":
-      return -SOURCE_MISMATCH_PENALTY;
+      return { bonus: EVIDENCE_BONUS, penalty: 0 };
     case "contradicted":
-      return -CONTRADICTED_PENALTY;
+      return { bonus: 0, penalty: CONTRADICTED_PENALTY };
+    case "source_mismatch":
+      return { bonus: 0, penalty: SOURCE_MISMATCH_PENALTY };
+    case "missing_context":
+      return { bonus: 0, penalty: MISSING_CONTEXT_PENALTY };
     case "unresolved":
     case "not_checkable":
-      return 0;
+      return { bonus: 0, penalty: 0 };
     default: {
       const unreachable: never = post.evidence_status;
       return unreachable;
@@ -42,12 +43,12 @@ function evidenceAdjustment(post: Post): number {
 export function rankPosts(posts: Post[], mode: FeedMode): RankedPost[] {
   const scored = posts.map((post) => {
     const engagementScore = roundScore(post.likes * LIKE_WEIGHT + post.shares * SHARE_WEIGHT);
-    const adjustment = mode === "evidence" ? evidenceAdjustment(post) : 0;
+    const terms = mode === "evidence" ? evidenceTerms(post) : { bonus: 0, penalty: 0 };
     return {
       ...post,
       engagement_score: engagementScore,
-      evidence_adjustment: adjustment,
-      score: roundScore(engagementScore * (1 + adjustment)),
+      evidence_adjustment: terms.bonus - terms.penalty,
+      score: roundScore(engagementScore + terms.bonus - terms.penalty),
       rank: 0,
     };
   });

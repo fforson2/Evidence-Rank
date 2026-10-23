@@ -21,7 +21,7 @@ DataOrigin = Literal["demo", "live", "model"]
 
 DEMO_DISCLAIMER = (
     "Demo data. These posts and evidence labels are fixtures for local development. "
-    "They are not live fact-checks and were not produced by a model."
+    "They are not live fact-checks."
 )
 
 LIVE_DISCLAIMER = (
@@ -30,7 +30,6 @@ LIVE_DISCLAIMER = (
 )
 
 MODEL_DISCLAIMER = (
-    "Model output. gpt-4o-mini labeled each post from passages retrieved out of the allowlisted "
-    "public pages, and the published EvidenceRank formula turned those labels into scores. "
-    "These labels are not human fact-checks."
+    "Evidence labels come from passages in the allowlisted public pages, and the EvidenceRank formula "
+    "turned those labels into scores. These labels are not human fact-checks."
 )

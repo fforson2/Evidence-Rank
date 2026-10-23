@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { FeedToggle } from "@/components/FeedToggle";
 import { PostCard } from "@/components/PostCard";
 import { RankingModeNote } from "@/components/RankingModeNote";
 import { ApiError, clearModelFeedCache, getFeed, getModelFeed, recordEvent, type DataSource } from "@/lib/api";
 import { rankPosts } from "@/lib/ranking";
+import { useFeedMode } from "@/lib/use-feed-mode";
 import { useFlipReorder } from "@/lib/use-flip-reorder";
-import type { EvidenceExplanation, RankedPost } from "@/types";
+import type { EvidenceExplanation, FeedMode, RankedPost } from "@/types";
 
 type InteractionState = {
   liked: boolean;
@@ -16,6 +18,7 @@ type InteractionState = {
 };
 
 export function Feed() {
+  const [mode, setMode] = useFeedMode();
   const listRef = useRef<HTMLDivElement>(null);
   const [posts, setPosts] = useState<RankedPost[]>([]);
   const [disclaimer, setDisclaimer] = useState<string | null>(null);
@@ -83,7 +86,21 @@ export function Feed() {
     };
   }, [attempt]);
 
-  useFlipReorder(listRef, posts.map((post) => post.id).join(","));
+  const rankedPosts = rankPosts(posts, mode);
+  const capturePositions = useFlipReorder(listRef, `${mode}:${rankedPosts.map((post) => post.id).join(",")}`);
+
+  function handleModeChange(next: FeedMode) {
+    if (next === mode) {
+      return;
+    }
+    capturePositions();
+    setMode(next);
+    void recordEvent({
+      event_type: "feed_mode_change",
+      feed_mode: next,
+      metadata: { from: mode },
+    });
+  }
 
   async function handleLike(post: RankedPost) {
     const existing = interactions[post.id] ?? {
@@ -98,7 +115,7 @@ export function Feed() {
     const saved = await recordEvent({
       post_id: post.id,
       event_type: "like",
-      feed_mode: "evidence",
+      feed_mode: mode,
       metadata: { delta },
     });
     if (!saved) {
@@ -106,12 +123,7 @@ export function Feed() {
       return;
     }
     setPosts((current) =>
-      rankPosts(
-        current.map((item) =>
-          item.id === post.id ? { ...item, likes: Math.max(0, item.likes + delta) } : item,
-        ),
-        "evidence",
-      ),
+      current.map((item) => (item.id === post.id ? { ...item, likes: Math.max(0, item.likes + delta) } : item)),
     );
   }
 
@@ -153,13 +165,10 @@ export function Feed() {
     }));
 
     if (shared) {
-      const saved = await recordEvent({ post_id: post.id, event_type: "share", feed_mode: "evidence" });
+      const saved = await recordEvent({ post_id: post.id, event_type: "share", feed_mode: mode });
       if (saved) {
         setPosts((current) =>
-          rankPosts(
-            current.map((item) => (item.id === post.id ? { ...item, shares: item.shares + 1 } : item)),
-            "evidence",
-          ),
+          current.map((item) => (item.id === post.id ? { ...item, shares: item.shares + 1 } : item)),
         );
       }
     }
@@ -175,22 +184,24 @@ export function Feed() {
     }, 2000);
   }
 
-  const statusText = phase === "loading" ? "Loading feed" : "Showing the EvidenceRank feed";
+  const statusText = phase === "loading" ? "Loading feed" : mode === "evidence" ? "Showing the EvidenceRank feed" : "Showing the engagement feed";
 
   return (
     <div className="space-y-4">
       <p className="text-sm leading-6 text-muted">
-        EvidenceRank asks gpt-4o-mini to label each claim from the public pages, then applies the ranking formula.
-        Likes and shares still change the order.
+        Switch the ranking. Engagement uses likes and shares. EvidenceRank adds a bonus or subtracts a reviewed penalty.
       </p>
-      <RankingModeNote usingDemoFixtures={source === "demo"} usingModel={source === "model"} />
+      <div className="sticky top-16 z-10">
+        <FeedToggle mode={mode} onChange={handleModeChange} />
+      </div>
+      <RankingModeNote mode={mode} usingDemoFixtures={source === "demo"} />
       <p className="sr-only" aria-live="polite">
         {refreshing ? "Updating feed" : statusText}
       </p>
 
       {phase !== "error" && source !== "model" ? (
         <p className="text-sm leading-6 text-muted">
-          gpt-4o-mini is labeling the feed from the public pages. The posts stay on screen while that finishes.
+          Labeling claims from the public pages. The posts stay on screen while that finishes.
         </p>
       ) : null}
       {phase === "loading" && posts.length === 0 ? (
@@ -228,7 +239,7 @@ export function Feed() {
               Showing local fixtures because the API at the configured address was unreachable.
             </p>
           ) : source === "model" ? (
-            <p className="text-xs text-muted">Evidence labels: gpt-4o-mini{refreshing ? " · updating" : ""}</p>
+            <p className="text-xs text-muted">Evidence labels from the public pages{refreshing ? " · updating" : ""}</p>
           ) : (
             <p className="text-xs text-muted">Feed data: API{refreshing ? " · updating" : ""}</p>
           )}
@@ -236,13 +247,13 @@ export function Feed() {
             <p className="rounded-2xl border border-line bg-card px-4 py-6 text-sm text-muted">No posts in this feed.</p>
           ) : (
             <div ref={listRef} className="space-y-4">
-              {posts.map((post) => {
+              {rankedPosts.map((post) => {
                 const state = interactions[post.id];
                 return (
                   <div key={post.id} data-flip-key={post.id}>
                     <PostCard
                       post={post}
-                      feedMode="evidence"
+                      feedMode={mode}
                       explanation={explanations[post.id] ?? null}
                       liked={state?.liked ?? false}
                       shareNotice={state?.shareNotice ?? null}

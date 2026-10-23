@@ -17,12 +17,12 @@ function adjustmentSummary(post: RankedPost, feedMode: FeedMode): string {
     return "This feed ranks by engagement only, so the evidence label did not change the score.";
   }
   if (post.evidence_adjustment < 0) {
-    return "An approved review recorded a negative evidence finding, so the engagement score was reduced.";
+    return "A reviewed claim was not supported, so that penalty was subtracted from the engagement score.";
   }
   if (post.evidence_adjustment > 0) {
-    return "An approved review found the post's evidence label supported, so the engagement score was increased.";
+    return "A reviewed claim was supported, so that bonus was added to the engagement score.";
   }
-  return "Unresolved claims, opinions, and posts without an approved review keep their engagement score.";
+  return "Unverified claims, opinions, and posts without a review keep their engagement score.";
 }
 
 export function EvidencePanel({ post, feedMode, explanation = null, onClose }: EvidencePanelProps) {
@@ -113,7 +113,7 @@ export function EvidencePanel({ post, feedMode, explanation = null, onClose }: E
             <p className="text-xs text-muted">Loaded from local fixtures because the API was unreachable.</p>
           ) : null}
           {source === "model" ? (
-            <p className="text-xs text-muted">Labeled by gpt-4o-mini from passages in the public pages.</p>
+            <p className="text-xs text-muted">Labeled from passages in the public pages.</p>
           ) : null}
           {evidence.claims.map((claim) => (
             <article key={claim.id} className="rounded-xl border border-line bg-card px-3 py-3">

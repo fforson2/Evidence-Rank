@@ -8,13 +8,13 @@ export const FEED_MODE_DETAILS: Record<FeedMode, { label: string; hint: string; 
   engagement: {
     label: "Engagement",
     hint: "Likes and shares",
-    description: "Posts are ordered by the likes and shares counted in this app.",
+    description: "Posts are ordered by likes and shares only.",
   },
   evidence: {
     label: "EvidenceRank",
-    hint: "gpt-4o-mini plus the formula",
+    hint: "Bonus and penalty",
     description:
-      "gpt-4o-mini labels each claim from the public pages. The EvidenceRank formula then adjusts the engagement score.",
+      "Adds 25 for a reviewed supported claim and subtracts 50 for a reviewed contradicted claim. Unverified claims keep their engagement score.",
   },
 };
 

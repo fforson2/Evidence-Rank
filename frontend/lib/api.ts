@@ -99,7 +99,7 @@ export type ModelFeedResult = {
 
 let modelFeedRequest: Promise<ModelFeedResult> | null = null;
 
-/** EvidenceRank labels from gpt-4o-mini. One in-flight request is shared, including across a remount. */
+/** Evidence labels for the feed. One in-flight request is shared, including across a remount. */
 export function getModelFeed(): Promise<ModelFeedResult> {
   if (!modelFeedRequest) {
     const pending = request<ModelRankResponse>("/analysis/rank", { method: "POST" })
@@ -120,7 +120,7 @@ export function getModelFeed(): Promise<ModelFeedResult> {
         if (isAbortError(error) || error instanceof ApiError) {
           throw error;
         }
-        throw new ApiError(0, "unreachable", "The evidence model could not be reached.");
+        throw new ApiError(0, "unreachable", "EvidenceRank could not label the feed.");
       });
     modelFeedRequest = pending;
   }

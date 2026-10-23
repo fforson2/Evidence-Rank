@@ -3,7 +3,7 @@ import { rankPosts } from "@/lib/ranking";
 import type { EvidenceExplanation, FeedMode, FeedResponse, Post } from "@/types";
 
 export const DEMO_DISCLAIMER =
-  "Demo data. These posts and evidence labels are fixtures for local development. They are not live fact-checks and were not produced by a model.";
+  "Demo data. These posts and evidence labels are fixtures for local development. They are not live fact-checks.";
 
 const PLACEHOLDER_VIDEO_URL =
   "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4";
