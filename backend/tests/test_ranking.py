@@ -3,7 +3,6 @@ import pytest
 from app.schemas.post import Post
 from app.services.ranking import rank_posts
 from app.data.fixtures import POSTS
-from app.services.ai import EvidencePipeline
 
 
 ENGAGEMENT_ORDER = [
@@ -80,10 +79,3 @@ def test_supported_boost_requires_an_approved_review() -> None:
     assert evidence.evidence_adjustment == 0
     assert evidence.score == evidence.engagement_score
 
-
-def test_ai_pipeline_does_not_invent_a_label() -> None:
-    pipeline = EvidencePipeline()
-    with pytest.raises(NotImplementedError):
-        pipeline.classify_claim("Example County counted late ballots.", ["source-handbook"])
-    with pytest.raises(NotImplementedError):
-        pipeline.transcribe_video("https://example.com/demo/video.mp4")

@@ -4,9 +4,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Runtime settings.
 
-    Supabase and OpenAI values are unused in this milestone. The demo serves
-    in-memory fixtures, so the API starts with none of them set. The Supabase
-    service-role key is a server secret and must not be exposed to the browser.
+    The demo feed serves in-memory fixtures and starts with none of these set.
+    POST /analysis/rank reads OPENAI_API_KEY. There is no user login. The
+    Supabase service-role key is a server secret and must not be exposed to the browser.
     """
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_service_role_key: str = ""
     openai_api_key: str = ""
+    openai_chat_model: str = "gpt-4o-mini"
+    openai_embedding_model: str = "text-embedding-3-small"
+    rag_top_k: int = 4
+    rag_min_score: float = 0.3
 
     def origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
