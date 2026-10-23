@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FeedToggle } from "@/components/FeedToggle";
 import { PostCard } from "@/components/PostCard";
+import { RankingModeNote } from "@/components/RankingModeNote";
 import { ApiError, getFeed, recordEvent, type DataSource } from "@/lib/api";
+import { useFeedMode } from "@/lib/use-feed-mode";
+import { useFlipReorder } from "@/lib/use-flip-reorder";
 import type { FeedMode, RankedPost } from "@/types";
 
 type InteractionState = {
@@ -22,7 +25,8 @@ function withInteractions(post: RankedPost, interactions: Record<string, Interac
 }
 
 export function Feed() {
-  const [mode, setMode] = useState<FeedMode>("engagement");
+  const [mode, setMode] = useFeedMode();
+  const listRef = useRef<HTMLDivElement>(null);
   const [loadedMode, setLoadedMode] = useState<FeedMode | null>(null);
   const [posts, setPosts] = useState<RankedPost[]>([]);
   const [disclaimer, setDisclaimer] = useState<string | null>(null);
@@ -69,10 +73,13 @@ export function Feed() {
     };
   }, [attempt, mode]);
 
+  const capturePositions = useFlipReorder(listRef, `${loadedMode}:${posts.map((post) => post.id).join(",")}`);
+
   function handleModeChange(next: FeedMode) {
     if (next === mode) {
       return;
     }
+    capturePositions();
     setPhase((current) => (current === "error" ? "loading" : current));
     setRefreshing(true);
     setMode(next);
@@ -170,6 +177,7 @@ export function Feed() {
       <div className="sticky top-16 z-10">
         <FeedToggle mode={mode} onChange={handleModeChange} />
       </div>
+      <RankingModeNote mode={mode} usingDemoFixtures={source === "demo"} />
       <p className="sr-only" aria-live="polite">
         {refreshing ? "Updating feed" : statusText}
       </p>
@@ -213,21 +221,24 @@ export function Feed() {
           {posts.length === 0 ? (
             <p className="rounded-2xl border border-line bg-card px-4 py-6 text-sm text-muted">No posts in this feed.</p>
           ) : (
-            posts.map((post) => {
-              const displayed = withInteractions(post, interactions);
-              const state = interactions[post.id];
-              return (
-                <PostCard
-                  key={post.id}
-                  post={displayed}
-                  feedMode={loadedMode}
-                  liked={state?.liked ?? false}
-                  shareNotice={state?.shareNotice ?? null}
-                  onLike={() => handleLike(displayed)}
-                  onShare={() => void handleShare(displayed)}
-                />
-              );
-            })
+            <div ref={listRef} className="space-y-4">
+              {posts.map((post) => {
+                const displayed = withInteractions(post, interactions);
+                const state = interactions[post.id];
+                return (
+                  <div key={post.id} data-flip-key={post.id}>
+                    <PostCard
+                      post={displayed}
+                      feedMode={loadedMode}
+                      liked={state?.liked ?? false}
+                      shareNotice={state?.shareNotice ?? null}
+                      onLike={() => handleLike(displayed)}
+                      onShare={() => void handleShare(displayed)}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       ) : null}

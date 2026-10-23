@@ -1,4 +1,5 @@
-import type { EvidenceStatus, ReviewStatus } from "@/types";
+import type { EvidenceStrengthLevel } from "@/lib/evidence-strength";
+import type { EvidenceScoreProvenance, EvidenceStatus, ReviewStatus } from "@/types";
 
 export const EVIDENCE_STATUS_LABELS: Record<EvidenceStatus, string> = {
   supported: "Supported",
@@ -30,6 +31,42 @@ export function evidenceBadgeClass(status: EvidenceStatus): string {
       return "bg-foreground/5 text-muted";
     default: {
       const unreachable: never = status;
+      return unreachable;
+    }
+  }
+}
+
+export const SCORE_PROVENANCE_LABELS: Record<EvidenceScoreProvenance, string> = {
+  demo: "Demo score",
+  evaluated: "Evaluated score",
+  unavailable: "Not scored",
+};
+
+export type StrengthTone = {
+  /** Applied as `currentColor` for rings and bars. */
+  stroke: string;
+  text: string;
+  soft: string;
+};
+
+export const UNSCORED_TONE: StrengthTone = {
+  stroke: "text-muted",
+  text: "text-muted",
+  soft: "bg-foreground/5",
+};
+
+export function strengthTone(level: EvidenceStrengthLevel): StrengthTone {
+  switch (level) {
+    case "strong":
+      return { stroke: "text-accent", text: "text-accent-strong", soft: "bg-accent/10" };
+    case "moderate":
+      return { stroke: "text-warning", text: "text-warning", soft: "bg-warning/10" };
+    case "limited":
+      return { stroke: "text-copper", text: "text-copper", soft: "bg-copper/10" };
+    case "insufficient":
+      return { stroke: "text-danger", text: "text-danger", soft: "bg-danger/10" };
+    default: {
+      const unreachable: never = level;
       return unreachable;
     }
   }

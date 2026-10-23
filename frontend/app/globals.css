@@ -32,3 +32,7 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+html:has(dialog:modal) {
+  overflow: hidden;
+}

@@ -1,3 +1,4 @@
+import { DEMO_EVIDENCE_STRENGTH } from "@/lib/mock-evidence-strength";
 import { rankPosts } from "@/lib/ranking";
 import type { EvidenceExplanation, FeedMode, FeedResponse, Post } from "@/types";
 
@@ -19,6 +20,7 @@ export const DEMO_POSTS: Post[] = [
     shares: 40,
     evidence_status: "contradicted",
     review_status: "approved",
+    evidence_strength: DEMO_EVIDENCE_STRENGTH["post-001"],
   },
   {
     id: "post-002",
@@ -31,6 +33,7 @@ export const DEMO_POSTS: Post[] = [
     shares: 30,
     evidence_status: "supported",
     review_status: "approved",
+    evidence_strength: DEMO_EVIDENCE_STRENGTH["post-002"],
   },
   {
     id: "post-003",
@@ -43,6 +46,7 @@ export const DEMO_POSTS: Post[] = [
     shares: 24,
     evidence_status: "unresolved",
     review_status: "approved",
+    evidence_strength: DEMO_EVIDENCE_STRENGTH["post-003"],
   },
   {
     id: "post-004",
@@ -55,6 +59,7 @@ export const DEMO_POSTS: Post[] = [
     shares: 80,
     evidence_status: "source_mismatch",
     review_status: "approved",
+    evidence_strength: DEMO_EVIDENCE_STRENGTH["post-004"],
   },
   {
     id: "post-005",
@@ -67,6 +72,7 @@ export const DEMO_POSTS: Post[] = [
     shares: 36,
     evidence_status: "missing_context",
     review_status: "approved",
+    evidence_strength: DEMO_EVIDENCE_STRENGTH["post-005"],
   },
   {
     id: "post-006",
@@ -79,6 +85,7 @@ export const DEMO_POSTS: Post[] = [
     shares: 10,
     evidence_status: "not_checkable",
     review_status: "approved",
+    evidence_strength: DEMO_EVIDENCE_STRENGTH["post-006"],
   },
   {
     id: "post-007",

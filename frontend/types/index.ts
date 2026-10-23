@@ -14,6 +14,33 @@ export type ReviewStatus = "pending" | "approved";
 
 export type DataOrigin = "demo";
 
+export type EvidenceDimensionKey = "source_quality" | "relevance" | "methodology" | "corroboration";
+
+/**
+ * `demo` values are hand-written fixtures, `evaluated` values come from a scoring pipeline,
+ * and `unavailable` marks an item that was intentionally not scored.
+ */
+export type EvidenceScoreProvenance = "demo" | "evaluated" | "unavailable";
+
+export interface EvidenceDimensionScore {
+  /** 0 to 100. */
+  score: number;
+  /** Percentage weight from 0 to 100. The four weights total 100. */
+  weight: number;
+  explanation?: string | null;
+  source_ids?: string[];
+}
+
+export type EvidenceDimensionScores = Record<EvidenceDimensionKey, EvidenceDimensionScore>;
+
+export interface EvidenceStrength {
+  provenance: EvidenceScoreProvenance;
+  /** A provided overall score is displayed as-is. When null, it is calculated from `dimensions`. */
+  overall_score: number | null;
+  dimensions: EvidenceDimensionScores | null;
+  note?: string | null;
+}
+
 export interface Post {
   id: string;
   type: PostType;
@@ -24,6 +51,7 @@ export interface Post {
   shares: number;
   evidence_status: EvidenceStatus;
   review_status: ReviewStatus;
+  evidence_strength?: EvidenceStrength | null;
 }
 
 export interface RankedPost extends Post {

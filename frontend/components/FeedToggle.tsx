@@ -1,5 +1,7 @@
 "use client";
 
+import { useRef, type KeyboardEvent } from "react";
+import { FEED_MODE_DETAILS, FEED_MODES } from "@/lib/feed-mode";
 import type { FeedMode } from "@/types";
 
 type FeedToggleProps = {
@@ -7,44 +9,71 @@ type FeedToggleProps = {
   onChange: (mode: FeedMode) => void;
 };
 
-const OPTIONS: { mode: FeedMode; label: string; hint: string }[] = [
-  { mode: "engagement", label: "Engagement", hint: "Likes and shares" },
-  { mode: "evidence", label: "EvidenceRank", hint: "Engagement plus reviewed evidence" },
-];
+const SELECTED_CLASS: Record<FeedMode, string> = {
+  engagement: "bg-copper text-white",
+  evidence: "bg-accent text-white",
+};
 
 export function FeedToggle({ mode, onChange }: FeedToggleProps) {
+  const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const count = FEED_MODES.length;
+    const current = FEED_MODES.indexOf(mode);
+    let next: number;
+    switch (event.key) {
+      case "ArrowRight":
+      case "ArrowDown":
+        next = (current + 1) % count;
+        break;
+      case "ArrowLeft":
+      case "ArrowUp":
+        next = (current - 1 + count) % count;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = count - 1;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    onChange(FEED_MODES[next]);
+    optionRefs.current[next]?.focus();
+  }
+
   return (
     <div
       role="radiogroup"
       aria-label="Feed ranking mode"
       className="grid grid-cols-2 gap-1 rounded-2xl border border-line bg-card p-1"
-      onKeyDown={(event) => {
-        if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") {
-          return;
-        }
-        event.preventDefault();
-        onChange(mode === "engagement" ? "evidence" : "engagement");
-      }}
+      onKeyDown={handleKeyDown}
     >
-      {OPTIONS.map((option) => {
-        const selected = option.mode === mode;
-        const selectedClass =
-          option.mode === "evidence" ? "bg-accent text-white" : "bg-copper text-white";
+      {FEED_MODES.map((option, index) => {
+        const selected = option === mode;
+        const details = FEED_MODE_DETAILS[option];
 
         return (
           <button
-            key={option.mode}
+            key={option}
+            ref={(element) => {
+              optionRefs.current[index] = element;
+            }}
             type="button"
             role="radio"
             aria-checked={selected}
-            onClick={() => onChange(option.mode)}
-            className={`rounded-xl px-3 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-              selected ? selectedClass : "text-foreground hover:bg-foreground/5"
+            tabIndex={selected ? 0 : -1}
+            title={details.description}
+            onClick={() => onChange(option)}
+            className={`min-w-0 rounded-xl px-3 py-2 text-left transition-colors motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+              selected ? SELECTED_CLASS[option] : "text-foreground hover:bg-foreground/5"
             }`}
           >
-            <span className="block text-sm font-semibold">{option.label}</span>
-            <span className={`mt-0.5 block text-xs ${selected ? "text-white/80" : "text-muted"}`}>
-              {option.hint}
+            <span className="block text-sm font-semibold">{details.label}</span>
+            <span className={`mt-0.5 block text-xs leading-snug ${selected ? "text-white/80" : "text-muted"}`}>
+              {details.hint}
             </span>
           </button>
         );

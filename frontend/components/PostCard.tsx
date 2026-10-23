@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { EvidencePanel } from "@/components/EvidencePanel";
+import { EvidenceScoreButton } from "@/components/EvidenceScoreButton";
 import { TextPost } from "@/components/TextPost";
 import { VideoPost } from "@/components/VideoPost";
 import { recordEvent } from "@/lib/api";
@@ -56,19 +57,22 @@ export function PostCard({ post, feedMode, liked, onLike, onShare, shareNotice }
 
   return (
     <article className="overflow-hidden rounded-2xl border border-line bg-card shadow-[0_1px_2px_rgba(28,36,48,0.04)]">
-      <div className="flex items-center gap-3 px-4 pt-4">
-        <span
-          aria-hidden
-          className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold text-white ${avatarColor(post.author)}`}
-        >
-          {initials(post.author)}
-        </span>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{post.author}</p>
-          <p className="text-xs text-muted">
-            {post.type === "video" ? "Video" : "Text"} · Rank {post.rank}
-          </p>
+      <div className="flex flex-wrap items-center gap-3 px-4 pt-4">
+        <div className="flex min-w-[10rem] flex-1 items-center gap-3">
+          <span
+            aria-hidden
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white ${avatarColor(post.author)}`}
+          >
+            {initials(post.author)}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">{post.author}</p>
+            <p className="truncate text-xs text-muted">
+              {post.type === "video" ? "Video" : "Text"} · Rank {post.rank}
+            </p>
+          </div>
         </div>
+        <EvidenceScoreButton strength={post.evidence_strength} description={`${post.author}: ${post.content}`} />
       </div>
 
       <div className="px-4 py-3">
@@ -79,7 +83,8 @@ export function PostCard({ post, feedMode, liked, onLike, onShare, shareNotice }
         )}
       </div>
 
-      <div className="flex flex-wrap gap-2 px-4">
+      <div className="flex flex-wrap items-center gap-2 px-4">
+        <span className="text-[11px] font-medium tracking-wide text-muted uppercase">Review label</span>
         <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${evidenceBadgeClass(post.evidence_status)}`}>
           {EVIDENCE_STATUS_LABELS[post.evidence_status]}
         </span>
