@@ -4,9 +4,10 @@ import type { FeedMode } from "@/types";
 type RankingModeNoteProps = {
   mode: FeedMode;
   usingDemoFixtures: boolean;
+  usingModel: boolean;
 };
 
-export function RankingModeNote({ mode, usingDemoFixtures }: RankingModeNoteProps) {
+export function RankingModeNote({ mode, usingDemoFixtures, usingModel }: RankingModeNoteProps) {
   const details = FEED_MODE_DETAILS[mode];
 
   return (
@@ -16,6 +17,11 @@ export function RankingModeNote({ mode, usingDemoFixtures }: RankingModeNoteProp
         {usingDemoFixtures ? (
           <span className="rounded-md border border-dashed border-copper/60 bg-copper/5 px-1.5 py-0.5 text-[11px] font-semibold text-copper">
             Demo data
+          </span>
+        ) : null}
+        {usingModel ? (
+          <span className="rounded-md border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[11px] font-semibold text-accent-strong">
+            gpt-4o-mini
           </span>
         ) : null}
       </div>
@@ -37,8 +43,9 @@ export function RankingModeNote({ mode, usingDemoFixtures }: RankingModeNoteProp
             <span className="font-medium text-foreground">Engagement</span> ranks by likes and shares.
           </li>
           <li>
-            <span className="font-medium text-foreground">EvidenceRank</span> starts from engagement and applies the
-            prototype&apos;s adjustment for approved review labels such as Supported or Contradicted.
+            <span className="font-medium text-foreground">EvidenceRank</span> asks gpt-4o-mini for a label from the
+            retrieved public pages, then applies the same adjustment for Supported, Contradicted, and the other review
+            labels.
           </li>
           <li>
             The <span className="font-medium text-foreground">evidence strength</span> score on each card is

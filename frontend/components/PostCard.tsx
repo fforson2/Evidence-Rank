@@ -13,11 +13,12 @@ import {
   formatScore,
   REVIEW_STATUS_LABELS,
 } from "@/lib/labels";
-import type { FeedMode, RankedPost } from "@/types";
+import type { EvidenceExplanation, FeedMode, RankedPost } from "@/types";
 
 type PostCardProps = {
   post: RankedPost;
   feedMode: FeedMode;
+  explanation?: EvidenceExplanation | null;
   liked: boolean;
   onLike: () => void;
   onShare: () => void;
@@ -40,7 +41,7 @@ function avatarColor(name: string): string {
   return AVATAR_COLORS[sum % AVATAR_COLORS.length] ?? AVATAR_COLORS[0];
 }
 
-export function PostCard({ post, feedMode, liked, onLike, onShare, shareNotice }: PostCardProps) {
+export function PostCard({ post, feedMode, explanation = null, liked, onLike, onShare, shareNotice }: PostCardProps) {
   const [evidenceOpen, setEvidenceOpen] = useState(false);
 
   function toggleEvidence() {
@@ -79,7 +80,7 @@ export function PostCard({ post, feedMode, liked, onLike, onShare, shareNotice }
         {post.type === "video" && post.video_url ? (
           <VideoPost src={post.video_url} caption={post.content} />
         ) : (
-          <TextPost content={post.content} />
+          <TextPost content={post.content} imageUrl={post.image_url} imageCredit={post.image_credit} />
         )}
       </div>
 
@@ -133,7 +134,7 @@ export function PostCard({ post, feedMode, liked, onLike, onShare, shareNotice }
       </div>
 
       {evidenceOpen ? (
-        <EvidencePanel post={post} feedMode={feedMode} onClose={() => setEvidenceOpen(false)} />
+        <EvidencePanel post={post} feedMode={feedMode} explanation={explanation} onClose={() => setEvidenceOpen(false)} />
       ) : null}
     </article>
   );

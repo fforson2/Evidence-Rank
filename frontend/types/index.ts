@@ -12,7 +12,7 @@ export type EvidenceStatus =
 
 export type ReviewStatus = "pending" | "approved";
 
-export type DataOrigin = "demo";
+export type DataOrigin = "demo" | "live" | "model";
 
 export type EvidenceDimensionKey = "source_quality" | "relevance" | "methodology" | "corroboration";
 
@@ -47,6 +47,8 @@ export interface Post {
   author: string;
   content: string;
   video_url: string | null;
+  image_url?: string | null;
+  image_credit?: string | null;
   likes: number;
   shares: number;
   evidence_status: EvidenceStatus;
@@ -122,6 +124,14 @@ export interface InteractionEvent {
 
 export interface HealthResponse {
   status: "ok";
+}
+
+export interface ModelRankResponse {
+  mode: "evidence";
+  data_origin: "model";
+  disclaimer: string;
+  posts: RankedPost[];
+  explanations: EvidenceExplanation[];
 }
 
 export interface ApiErrorBody {

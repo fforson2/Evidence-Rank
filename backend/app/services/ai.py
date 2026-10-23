@@ -16,16 +16,16 @@ from app.config import settings
 from app.schemas.common import MODEL_DISCLAIMER, EvidenceStatus
 from app.schemas.evidence import Claim, EvidenceExplanation, EvidenceSource
 from app.schemas.post import Post, RankedPost
-from app.services.rag import EvidenceIndex, ScoredChunk, cached_index
+from app.services.rag import EvidenceIndex, ScoredChunk
 from app.services.ranking import rank_posts
 
 _GROUNDED_STATUSES = {"supported", "missing_context", "source_mismatch", "contradicted"}
 
 _EXTRACT_INSTRUCTIONS = (
-    "Extract the factual claims from a social post about a fictional Example County election. "
-    "Return each distinct claim that the post states. Mark checkable false for opinions, "
-    "advice, and predictions. Do not add facts that are not in the post. "
-    "If the post has no checkable claim, return one claim with checkable set to false."
+    "Extract the factual claims from the text. "
+    "Return each distinct claim the text states. Mark checkable false for opinions, "
+    "advice, predictions, and legal disclaimers. Do not add facts that are not in the text. "
+    "If the text has no checkable claim, return one claim with checkable set to false."
 )
 
 _CLASSIFY_INSTRUCTIONS = (
@@ -38,7 +38,7 @@ _CLASSIFY_INSTRUCTIONS = (
     "not_checkable means the claim is an opinion or other non-factual statement. "
     "Cite only source ids that appear in the passages. "
     "If you cannot cite a passage, use unresolved and an empty source_ids list. "
-    "Do not use outside knowledge. The corpus is fictional demo material."
+    "Do not use outside knowledge. Use only the retrieved passages."
 )
 
 
@@ -292,6 +292,13 @@ class EvidencePipeline:
 def default_pipeline() -> EvidencePipeline:
     if not settings.openai_api_key:
         raise PipelineNotConfigured("OPENAI_API_KEY is not set.")
+    from app.models.store import store
+    from app.services.live_feed import LiveFeedUnavailable
+
+    try:
+        store.ensure_ready()
+    except LiveFeedUnavailable as exc:
+        raise PipelineNotConfigured(str(exc)) from exc
     model = OpenAIEvidenceModel(
         api_key=settings.openai_api_key,
         chat_model=settings.openai_chat_model,
@@ -299,7 +306,7 @@ def default_pipeline() -> EvidencePipeline:
     )
     return EvidencePipeline(
         model,
-        cached_index(model),
+        store.evidence_index(model),
         top_k=settings.rag_top_k,
         min_score=settings.rag_min_score,
     )

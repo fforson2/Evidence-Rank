@@ -2,7 +2,11 @@
 
 Frontend and backend share this contract. If a field changes, update this document, the Pydantic models in `backend/app/schemas/`, and the TypeScript interfaces in `frontend/types/index.ts` in the same pull request.
 
-The running demo serves **fixture data**. Responses include `data_origin: "demo"`. Those labels are not live fact-checks and are not model output.
+`GET /posts` and `GET /feed` serve claims extracted from the allowlisted public pages and use `data_origin: "live"`. Likes and shares change when `POST /events` records a like or a share. A like body may include `"metadata": {"delta": -1}` to undo a like.
+
+`POST /analysis/rank` is the model path. It returns `data_origin: "model"`. gpt-4o-mini chooses the evidence label from passages retrieved out of those same pages. The numeric score still uses the formula in this document. There is no login. The route needs `OPENAI_API_KEY` on the server and returns 503 when that key is empty or no page could be read.
+
+The JSON examples below show the field shape with the original fixture posts. A live response uses the same fields, `data_origin: "live"`, and claims taken from the allowlisted pages.
 
 Base URL in local development: `http://localhost:8000`
 
@@ -207,3 +211,79 @@ Records an interaction. In this milestone the event is stored in memory and does
 ```
 
 An unknown `post_id` returns 404. A body that fails validation returns 422.
+
+## `POST /analysis/rank`
+
+No request body. Reads the fixture posts, embeds the demo corpus on the first call in the process, and labels each post:
+
+1. Extract claims from the post body. Video posts use the caption.
+2. If nothing is checkable, the label is `not_checkable`.
+3. Embed the main checkable claim and keep passages whose cosine similarity is at least `RAG_MIN_SCORE` (default 0.3), up to `RAG_TOP_K` (default 4).
+4. If no passage qualifies, the label is `unresolved`.
+5. Otherwise OpenAI chooses one evidence status and must cite a retrieved source id. A grounded status with no citation is stored as `unresolved`.
+
+The response posts are then ranked with `mode: "evidence"`. Model labels are stored with `review_status: "approved"` so the formula can apply a boost or a penalty. `unresolved` and `not_checkable` still leave the engagement score unchanged.
+
+```json
+{
+  "mode": "evidence",
+  "data_origin": "model",
+  "disclaimer": "Model output. A language model labeled each post from passages retrieved out of the demo source corpus, and the published EvidenceRank formula turned those labels into scores. Video posts are ranked from their captions. These labels are not human fact-checks.",
+  "posts": [
+    {
+      "id": "post-002",
+      "type": "video",
+      "author": "Jordan Hale",
+      "content": "Demo video. The picture is a public-domain placeholder clip. The claim is in this caption: Example County's demo election office reported that 64% of registered voters turned out.",
+      "video_url": "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+      "likes": 420,
+      "shares": 30,
+      "evidence_status": "supported",
+      "review_status": "approved",
+      "rank": 1,
+      "engagement_score": 495,
+      "evidence_adjustment": 0.2,
+      "score": 594
+    }
+  ],
+  "explanations": [
+    {
+      "post_id": "post-002",
+      "data_origin": "model",
+      "disclaimer": "Model output. A language model labeled each post from passages retrieved out of the demo source corpus, and the published EvidenceRank formula turned those labels into scores. Video posts are ranked from their captions. These labels are not human fact-checks.",
+      "claims": [
+        {
+          "id": "post-002-model",
+          "text": "Example County's demo election office reported that 64% of registered voters turned out.",
+          "evidence_status": "supported",
+          "review_status": "approved",
+          "explanation": "The retrieved turnout report states that 64% of registered voters turned out.",
+          "sources": [
+            {
+              "id": "source-turnout",
+              "title": "Example County Turnout Report (demo)",
+              "url": "https://example.com/demo/example-county/turnout-report",
+              "publisher": "Example County Elections Office (demo)"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+The example scores show the formula after a `supported` label. A later model run can choose a different label, and the order can change with it. `engagement_score` stays the likes-and-shares value from the fixture.
+
+Missing `OPENAI_API_KEY` returns 503:
+
+```json
+{
+  "detail": {
+    "error": "not_configured",
+    "message": "OPENAI_API_KEY is not set."
+  }
+}
+```
+
+A failed model request returns 502 with `error: "model_error"`.

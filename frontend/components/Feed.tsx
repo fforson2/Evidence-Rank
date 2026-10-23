@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { FeedToggle } from "@/components/FeedToggle";
 import { PostCard } from "@/components/PostCard";
 import { RankingModeNote } from "@/components/RankingModeNote";
-import { ApiError, getFeed, recordEvent, type DataSource } from "@/lib/api";
+import { ApiError, clearModelFeedCache, getFeed, getModelFeed, recordEvent, type DataSource } from "@/lib/api";
 import { useFeedMode } from "@/lib/use-feed-mode";
+import { rankPosts } from "@/lib/ranking";
 import { useFlipReorder } from "@/lib/use-flip-reorder";
-import type { FeedMode, RankedPost } from "@/types";
+import type { EvidenceExplanation, FeedMode, RankedPost } from "@/types";
 
 type InteractionState = {
   liked: boolean;
@@ -15,14 +16,6 @@ type InteractionState = {
   shares: number;
   shareNotice: string | null;
 };
-
-function withInteractions(post: RankedPost, interactions: Record<string, InteractionState>): RankedPost {
-  const state = interactions[post.id];
-  if (!state) {
-    return post;
-  }
-  return { ...post, likes: state.likes, shares: state.shares };
-}
 
 export function Feed() {
   const [mode, setMode] = useFeedMode();
@@ -36,12 +29,37 @@ export function Feed() {
   const [refreshing, setRefreshing] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [interactions, setInteractions] = useState<Record<string, InteractionState>>({});
+  const [explanations, setExplanations] = useState<Record<string, EvidenceExplanation>>({});
+  const postsRef = useRef(posts);
+  postsRef.current = posts;
 
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
 
-    getFeed(mode, controller.signal)
+    if (mode === "evidence" && postsRef.current.length === 0) {
+      getFeed("engagement", controller.signal)
+        .then((result) => {
+          if (!active) {
+            return;
+          }
+          setPosts((current) => (current.length > 0 ? current : result.feed.posts));
+          setLoadedMode((current) => current ?? "engagement");
+          setDisclaimer((current) => current ?? result.feed.disclaimer);
+          setSource((current) => current ?? result.source);
+          setPhase((current) => (current === "error" ? current : "ready"));
+        })
+        .catch(() => {
+          // The model request below reports a failure if the preview feed also fails.
+        });
+    }
+
+    const feedRequest =
+      mode === "evidence"
+        ? getModelFeed()
+        : getFeed(mode, controller.signal).then((result) => ({ ...result, explanations: [] as EvidenceExplanation[] }));
+
+    feedRequest
       .then((result) => {
         if (!active) {
           return;
@@ -50,6 +68,7 @@ export function Feed() {
         setLoadedMode(result.feed.mode);
         setDisclaimer(result.feed.disclaimer);
         setSource(result.source);
+        setExplanations(Object.fromEntries(result.explanations.map((item) => [item.post_id, item])));
         setError(null);
         setPhase("ready");
       })
@@ -80,7 +99,15 @@ export function Feed() {
       return;
     }
     capturePositions();
-    setPhase((current) => (current === "error" ? "loading" : current));
+    if (next === "evidence") {
+      clearModelFeedCache();
+    }
+    setPhase((current) => {
+      if (current === "error" || posts.length === 0) {
+        return "loading";
+      }
+      return "ready";
+    });
     setRefreshing(true);
     setMode(next);
     void recordEvent({
@@ -90,7 +117,7 @@ export function Feed() {
     });
   }
 
-  function handleLike(post: RankedPost) {
+  async function handleLike(post: RankedPost) {
     const existing = interactions[post.id] ?? {
       liked: false,
       likes: post.likes,
@@ -98,14 +125,41 @@ export function Feed() {
       shareNotice: null,
     };
     const liked = !existing.liked;
-    const next = {
-      ...existing,
-      liked,
-      likes: existing.likes + (liked ? 1 : -1),
-    };
-    setInteractions((current) => ({ ...current, [post.id]: next }));
-    if (liked) {
-      void recordEvent({ post_id: post.id, event_type: "like", feed_mode: mode });
+    const delta = liked ? 1 : -1;
+    setInteractions((current) => ({ ...current, [post.id]: { ...existing, liked } }));
+    const saved = await recordEvent({
+      post_id: post.id,
+      event_type: "like",
+      feed_mode: mode,
+      metadata: { delta },
+    });
+    if (!saved) {
+      setInteractions((current) => ({ ...current, [post.id]: existing }));
+      return;
+    }
+    if (mode === "evidence") {
+      setPosts((current) =>
+        rankPosts(
+          current.map((item) =>
+            item.id === post.id ? { ...item, likes: Math.max(0, item.likes + delta) } : item,
+          ),
+          "evidence",
+        ),
+      );
+      return;
+    }
+    try {
+      const result = await getFeed("engagement");
+      setPosts(result.feed.posts);
+      setLoadedMode(result.feed.mode);
+      setDisclaimer(result.feed.disclaimer);
+      setSource(result.source);
+    } catch {
+      setPosts((current) =>
+        current.map((item) =>
+          item.id === post.id ? { ...item, likes: Math.max(0, item.likes + delta) } : item,
+        ),
+      );
     }
   }
 
@@ -142,13 +196,32 @@ export function Feed() {
       ...current,
       [post.id]: {
         ...(current[post.id] ?? existing),
-        shares: (current[post.id]?.shares ?? existing.shares) + (shared ? 1 : 0),
         shareNotice: notice,
       },
     }));
 
     if (shared) {
-      void recordEvent({ post_id: post.id, event_type: "share", feed_mode: mode });
+      const saved = await recordEvent({ post_id: post.id, event_type: "share", feed_mode: mode });
+      if (saved && mode === "evidence") {
+        setPosts((current) =>
+          rankPosts(
+            current.map((item) => (item.id === post.id ? { ...item, shares: item.shares + 1 } : item)),
+            "evidence",
+          ),
+        );
+      } else if (saved) {
+        try {
+          const result = await getFeed("engagement");
+          setPosts(result.feed.posts);
+          setLoadedMode(result.feed.mode);
+          setDisclaimer(result.feed.disclaimer);
+          setSource(result.source);
+        } catch {
+          setPosts((current) =>
+            current.map((item) => (item.id === post.id ? { ...item, shares: item.shares + 1 } : item)),
+          );
+        }
+      }
     }
 
     window.setTimeout(() => {
@@ -172,17 +245,25 @@ export function Feed() {
   return (
     <div className="space-y-4">
       <p className="text-sm leading-6 text-muted">
-        Compare an engagement ranking with one that also uses reviewed evidence. Every label in this prototype is demo data.
+        Claims come from public government pages. Likes and shares change the order. EvidenceRank asks gpt-4o-mini to label each claim, then applies the ranking formula.
       </p>
       <div className="sticky top-16 z-10">
         <FeedToggle mode={mode} onChange={handleModeChange} />
       </div>
-      <RankingModeNote mode={mode} usingDemoFixtures={source === "demo"} />
+      <RankingModeNote mode={mode} usingDemoFixtures={source === "demo"} usingModel={source === "model"} />
       <p className="sr-only" aria-live="polite">
         {refreshing ? "Updating feed" : statusText}
       </p>
 
-      {phase === "loading" ? (
+      {mode === "evidence" && phase !== "error" && source !== "model" ? (
+        <p className="text-sm leading-6 text-muted">
+          gpt-4o-mini is labeling the feed from the public pages. The posts stay on screen while that finishes.
+        </p>
+      ) : null}
+      {phase === "loading" && mode === "engagement" && posts.length === 0 ? (
+        <p className="text-sm leading-6 text-muted">Reading the public pages and building the feed.</p>
+      ) : null}
+      {phase === "loading" && posts.length === 0 ? (
         <div className="space-y-4" aria-hidden>
           {Array.from({ length: 3 }, (_, index) => (
             <div key={index} className="h-44 rounded-2xl border border-line bg-card motion-safe:animate-pulse" />
@@ -197,6 +278,9 @@ export function Feed() {
           <button
             type="button"
             onClick={() => {
+              if (mode === "evidence") {
+                clearModelFeedCache();
+              }
               setPhase("loading");
               setError(null);
               setAttempt((current) => current + 1);
@@ -208,13 +292,15 @@ export function Feed() {
         </div>
       ) : null}
 
-      {phase === "ready" && loadedMode ? (
+      {phase !== "error" && posts.length > 0 && loadedMode ? (
         <div className="space-y-4" aria-busy={refreshing}>
           {disclaimer ? <p className="text-xs leading-5 text-muted">{disclaimer}</p> : null}
           {source === "demo" ? (
             <p className="rounded-xl border border-line bg-card px-3 py-2 text-xs leading-5 text-muted">
               Showing local fixtures because the API at the configured address was unreachable.
             </p>
+          ) : source === "model" ? (
+            <p className="text-xs text-muted">Evidence labels: gpt-4o-mini{refreshing ? " · updating" : ""}</p>
           ) : (
             <p className="text-xs text-muted">Feed data: API{refreshing ? " · updating" : ""}</p>
           )}
@@ -223,17 +309,17 @@ export function Feed() {
           ) : (
             <div ref={listRef} className="space-y-4">
               {posts.map((post) => {
-                const displayed = withInteractions(post, interactions);
                 const state = interactions[post.id];
                 return (
                   <div key={post.id} data-flip-key={post.id}>
                     <PostCard
-                      post={displayed}
+                      post={post}
                       feedMode={loadedMode}
+                      explanation={explanations[post.id] ?? null}
                       liked={state?.liked ?? false}
                       shareNotice={state?.shareNotice ?? null}
-                      onLike={() => handleLike(displayed)}
-                      onShare={() => void handleShare(displayed)}
+                      onLike={() => void handleLike(post)}
+                      onShare={() => void handleShare(post)}
                     />
                   </div>
                 );

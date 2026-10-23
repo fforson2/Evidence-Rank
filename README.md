@@ -7,9 +7,9 @@ EvidenceRank is a research prototype for an evidence-aware social feed. It compa
 
 The adjustment can lower a post only when an approved review recorded a negative finding (`contradicted`, `source_mismatch`, or `missing_context`). Supported posts can receive a small boost. Unresolved claims, opinions, and posts that have not been reviewed keep their engagement score.
 
-This repository is the MVP foundation. It runs locally on labeled demo fixtures. It does not call OpenAI, and it does not need Supabase credentials.
+The live feed extracts claims from allowlisted United States government pages and counts likes and shares in this app. EvidenceRank retrieves passages from those pages and asks gpt-4o-mini for a label, then applies the ranking formula. Both steps need `OPENAI_API_KEY` on the backend. There is no login.
 
-Posts describe a fictional "Example County" election. Evidence labels are hand-written fixtures for development. They are not live fact-checks.
+The Example County fixtures remain in the repository for tests. They are not what the API serves.
 
 ## Repository layout
 
@@ -78,21 +78,24 @@ The contract, including example JSON and the ranking formula, is in [docs/api-co
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/health` | Health check |
-| `GET` | `/posts` | Fixture posts, unranked |
+| `GET` | `/posts` | Live claims, unranked |
 | `GET` | `/feed?mode=engagement` | Engagement ranking |
-| `GET` | `/feed?mode=evidence` | Evidence ranking |
-| `GET` | `/posts/{post_id}/evidence` | Demo explanation for one post |
-| `POST` | `/events` | Record a like, share, evidence open, or mode change |
+| `GET` | `/feed?mode=evidence` | Evidence ranking of the stored labels |
+| `GET` | `/posts/{post_id}/evidence` | Explanation for one claim |
+| `POST` | `/events` | Record a like, share, evidence open, or mode change. A like can send `metadata.delta` of `-1`. |
+| `POST` | `/analysis/rank` | Retrieve the public pages, label claims with gpt-4o-mini, then rank with the evidence formula |
 
 ## Supabase
 
 `supabase/migrations/20261022000000_initial_schema.sql` creates `posts`, `claims`, `evidence_sources`, `claim_evidence`, `interaction_events`, and `experiment_assignments`. Row-level security is enabled and no browser policies are granted. The backend service role is the intended database client later.
 
-Applying the migration is optional. Nothing in the local demo connects to Supabase. `pgvector` is enabled in the migration for a later retrieval step. Embedding columns are not created yet.
+Applying the migration is optional. Nothing in the local demo connects to Supabase. The model rank route keeps its embeddings in memory. `pgvector` is enabled in the migration for a later database-backed index. Embedding columns are not created yet.
 
 ## Evidence pipeline
 
-`backend/app/services/ai.py` defines the later pipeline: transcribe a video, extract claims, retrieve evidence, classify a claim, and write an explanation. Those methods raise `NotImplementedError`. The demo explanations come from `backend/app/services/evidence.py` and are marked `data_origin: "demo"`.
+`GET /posts` and `GET /feed` return claims extracted from the allowlisted pages in `backend/app/data/web_sources.py` and mark them `data_origin: "live"`. Likes and shares are stored in `backend/data/live_counts.json`, which is not committed.
+
+`POST /analysis/rank` runs the model pipeline in `backend/app/services/ai.py`. It embeds those pages, retrieves the nearest passages, and asks gpt-4o-mini to label the main checkable claim. The score is still `engagement_score * (1 + evidence_adjustment)`. Labels are `data_origin: "model"`. A claim with no retrieved passage, or a label that cites no retrieved source, stays `unresolved` and keeps its engagement score.
 
 ## Deployment notes
 
@@ -100,7 +103,7 @@ Applying the migration is optional. Nothing in the local demo connects to Supaba
 - **Backend:** Render, with the root set to `backend`. Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
 - Add the deployed frontend origin to the backend `CORS_ORIGINS` value.
 
-Authentication, background jobs, the experiment assignment flow, and the retrieval pipeline are intentionally not built yet.
+Authentication, background jobs, and the experiment assignment flow are not built. The model rank route does not require a login.
 
 ## Contributing
 

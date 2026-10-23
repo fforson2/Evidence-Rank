@@ -8,13 +8,13 @@ export const FEED_MODE_DETAILS: Record<FeedMode, { label: string; hint: string; 
   engagement: {
     label: "Engagement",
     hint: "Likes and shares",
-    description: "Posts are ordered using the existing engagement ranking.",
+    description: "Posts are ordered by the likes and shares counted in this app.",
   },
   evidence: {
     label: "EvidenceRank",
-    hint: "Engagement plus reviewed evidence",
+    hint: "gpt-4o-mini plus the formula",
     description:
-      "Posts are ordered using the existing EvidenceRank ranking: engagement adjusted by approved review labels.",
+      "gpt-4o-mini labels each claim from the public pages. The EvidenceRank formula then adjusts the engagement score.",
   },
 };
 

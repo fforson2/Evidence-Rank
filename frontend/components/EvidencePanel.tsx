@@ -8,6 +8,7 @@ import type { EvidenceExplanation, FeedMode, RankedPost } from "@/types";
 type EvidencePanelProps = {
   post: RankedPost;
   feedMode: FeedMode;
+  explanation?: EvidenceExplanation | null;
   onClose: () => void;
 };
 
@@ -24,7 +25,7 @@ function adjustmentSummary(post: RankedPost, feedMode: FeedMode): string {
   return "Unresolved claims, opinions, and posts without an approved review keep their engagement score.";
 }
 
-export function EvidencePanel({ post, feedMode, onClose }: EvidencePanelProps) {
+export function EvidencePanel({ post, feedMode, explanation = null, onClose }: EvidencePanelProps) {
   const [evidence, setEvidence] = useState<EvidenceExplanation | null>(null);
   const [source, setSource] = useState<DataSource | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +33,14 @@ export function EvidencePanel({ post, feedMode, onClose }: EvidencePanelProps) {
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    if (explanation) {
+      setEvidence(explanation);
+      setSource(explanation.data_origin === "model" ? "model" : "api");
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     const controller = new AbortController();
 
     getEvidence(post.id, controller.signal)
@@ -55,7 +64,7 @@ export function EvidencePanel({ post, feedMode, onClose }: EvidencePanelProps) {
       });
 
     return () => controller.abort();
-  }, [attempt, post.id]);
+  }, [attempt, explanation, post.id]);
 
   return (
     <section className="border-t border-line bg-background/70 px-4 py-4" aria-label="Evidence explanation">
@@ -103,6 +112,9 @@ export function EvidencePanel({ post, feedMode, onClose }: EvidencePanelProps) {
           {source === "demo" ? (
             <p className="text-xs text-muted">Loaded from local fixtures because the API was unreachable.</p>
           ) : null}
+          {source === "model" ? (
+            <p className="text-xs text-muted">Labeled by gpt-4o-mini from passages in the public pages.</p>
+          ) : null}
           {evidence.claims.map((claim) => (
             <article key={claim.id} className="rounded-xl border border-line bg-card px-3 py-3">
               <div className="flex flex-wrap gap-2">
@@ -134,7 +146,11 @@ export function EvidencePanel({ post, feedMode, onClose }: EvidencePanelProps) {
                   ))}
                 </ul>
               ) : (
-                <p className="mt-3 text-xs text-muted">No source is attached to this demo claim.</p>
+                <p className="mt-3 text-xs text-muted">
+                  {evidence.data_origin === "model"
+                    ? "No retrieved source was cited for this claim."
+                    : "No source is attached to this demo claim."}
+                </p>
               )}
             </article>
           ))}

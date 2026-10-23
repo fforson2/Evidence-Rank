@@ -9,6 +9,8 @@ class Post(BaseModel):
     author: str
     content: str
     video_url: str | None = None
+    image_url: str | None = None
+    image_credit: str | None = None
     likes: int = Field(ge=0)
     shares: int = Field(ge=0)
     evidence_status: EvidenceStatus

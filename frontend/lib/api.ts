@@ -1,4 +1,3 @@
-import { DEMO_DISCLAIMER, getMockEvidence, getMockFeed, getMockPosts } from "@/lib/mock-data";
 import type {
   ApiErrorBody,
   EvidenceExplanation,
@@ -7,12 +6,13 @@ import type {
   HealthResponse,
   InteractionEvent,
   InteractionEventRequest,
+  ModelRankResponse,
   PostListResponse,
 } from "@/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-export type DataSource = "api" | "demo";
+export type DataSource = "api" | "demo" | "model";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -87,15 +87,52 @@ export async function getPosts(signal?: AbortSignal): Promise<{ posts: PostListR
     if (isAbortError(error) || error instanceof ApiError) {
       throw error;
     }
-    return {
-      posts: {
-        data_origin: "demo",
-        disclaimer: DEMO_DISCLAIMER,
-        posts: getMockPosts(),
-      },
-      source: "demo",
-    };
+    throw new ApiError(0, "unreachable", "The API could not be reached.");
   }
+}
+
+export type ModelFeedResult = {
+  feed: FeedResponse;
+  explanations: EvidenceExplanation[];
+  source: DataSource;
+};
+
+let modelFeedRequest: Promise<ModelFeedResult> | null = null;
+
+/** EvidenceRank labels from gpt-4o-mini. One in-flight request is shared, including across a remount. */
+export function getModelFeed(): Promise<ModelFeedResult> {
+  if (!modelFeedRequest) {
+    const pending = request<ModelRankResponse>("/analysis/rank", { method: "POST" })
+      .then((body) => ({
+        feed: {
+          mode: "evidence" as const,
+          data_origin: body.data_origin,
+          disclaimer: body.disclaimer,
+          posts: body.posts,
+        },
+        explanations: body.explanations,
+        source: "model" as const,
+      }))
+      .catch((error: unknown) => {
+        if (modelFeedRequest === pending) {
+          modelFeedRequest = null;
+        }
+        if (isAbortError(error) || error instanceof ApiError) {
+          throw error;
+        }
+        throw new ApiError(0, "unreachable", "The evidence model could not be reached.");
+      });
+    modelFeedRequest = pending;
+  }
+  return modelFeedRequest;
+}
+
+export function clearModelFeedCache(): void {
+  modelFeedRequest = null;
+}
+
+export function hasModelFeedCache(): boolean {
+  return modelFeedRequest !== null;
 }
 
 export async function getFeed(
@@ -109,7 +146,7 @@ export async function getFeed(
     if (isAbortError(error) || error instanceof ApiError) {
       throw error;
     }
-    return { feed: getMockFeed(mode), source: "demo" };
+    throw new ApiError(0, "unreachable", "The API could not be reached.");
   }
 }
 
@@ -121,30 +158,27 @@ export async function getEvidence(
     const evidence = await request<EvidenceExplanation>(`/posts/${encodeURIComponent(postId)}/evidence`, {
       signal,
     });
-    return { evidence, source: "api" };
+    return { evidence, source: evidence.data_origin === "model" ? "model" : "api" };
   } catch (error) {
     if (isAbortError(error) || error instanceof ApiError) {
       throw error;
     }
-    const evidence = getMockEvidence(postId);
-    if (!evidence) {
-      throw new ApiError(404, "not_found", "Post not found");
-    }
-    return { evidence, source: "demo" };
+    throw new ApiError(0, "unreachable", "The API could not be reached.");
   }
 }
 
-export async function recordEvent(event: InteractionEventRequest, signal?: AbortSignal): Promise<void> {
+export async function recordEvent(event: InteractionEventRequest, signal?: AbortSignal): Promise<boolean> {
   try {
     await request<InteractionEvent>("/events", {
       method: "POST",
       body: JSON.stringify(event),
       signal,
     });
+    return true;
   } catch (error) {
     if (isAbortError(error)) {
-      return;
+      return false;
     }
-    // Interaction logging is best-effort so the demo still works without the API.
+    return false;
   }
 }
