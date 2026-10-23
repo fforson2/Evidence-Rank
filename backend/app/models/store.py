@@ -11,6 +11,7 @@ from app.schemas.common import LIVE_DISCLAIMER, MODEL_DISCLAIMER
 from app.schemas.event import InteractionEvent, InteractionEventCreate
 from app.schemas.evidence import Claim, EvidenceExplanation, EvidenceSource
 from app.schemas.post import Post, RankedPost
+from app.services.evidence_strength import strength_from_status
 from app.services.live_feed import LiveFeedUnavailable, build_posts, is_stale, load_documents
 from app.services.rag import EvidenceIndex, build_index
 
@@ -100,7 +101,7 @@ class LiveStore:
             return self._index
 
     def list_posts(self) -> list[Post]:
-        return [post.model_copy() for post in self._posts.values()]
+        return [self._with_strength(post) for post in self._posts.values()]
 
     def get_post(self, post_id: str) -> Post | None:
         post = self._posts.get(post_id)
@@ -178,6 +179,7 @@ class LiveStore:
                     update={
                         "evidence_status": post.evidence_status,
                         "review_status": post.review_status,
+                        "evidence_strength": post.evidence_strength,
                     }
                 )
                 self._posts[post.id] = updated
@@ -185,6 +187,11 @@ class LiveStore:
                     self._explanations[post.id] = text.strip()
                 self._remember(updated, text)
             self._persist()
+
+    def _with_strength(self, post: Post) -> Post:
+        if post.evidence_strength is not None:
+            return post.model_copy()
+        return post.model_copy(update={"evidence_strength": strength_from_status(post.evidence_status)})
 
     def clear_events(self) -> None:
         self._events.clear()
@@ -212,6 +219,8 @@ class LiveStore:
         record["review_status"] = post.review_status
         if explanation.strip():
             record["explanation"] = explanation.strip()
+        if post.evidence_strength is not None:
+            record["evidence_strength"] = post.evidence_strength.model_dump()
 
     def _persist(self) -> None:
         self._counts_path.parent.mkdir(parents=True, exist_ok=True)

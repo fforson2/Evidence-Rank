@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from app.config import settings
 from app.data.corpus import CorpusDocument
 from app.data.media import picture_for
+from app.schemas.strength import EvidenceStrength
+from app.services.evidence_strength import strength_from_status
 from app.schemas.common import EvidenceStatus, ReviewStatus
 from app.schemas.post import Post
 from app.services.web_fetch import fetch_web_sources
@@ -70,6 +72,9 @@ def build_posts(
                 shares=_nonnegative(record.get("shares", 0)),
                 evidence_status=_status(record.get("evidence_status"), "unresolved"),
                 review_status=_review(record.get("review_status"), "pending"),
+                evidence_strength=_saved_strength(record) or strength_from_status(
+                    _status(record.get("evidence_status"), "unresolved")
+                ),
             )
             origins[post_id] = document
             kept += 1
@@ -89,6 +94,16 @@ def load_documents() -> list[CorpusDocument]:
 def _skipped(text: str) -> bool:
     lowered = text.casefold()
     return any(phrase in lowered for phrase in _SKIP_PHRASES)
+
+
+def _saved_strength(record: dict) -> EvidenceStrength | None:
+    raw = record.get("evidence_strength")
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return EvidenceStrength.model_validate(raw)
+    except ValueError:
+        return None
 
 
 def _nonnegative(value: object) -> int:

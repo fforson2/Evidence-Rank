@@ -1,14 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FeedToggle } from "@/components/FeedToggle";
 import { PostCard } from "@/components/PostCard";
 import { RankingModeNote } from "@/components/RankingModeNote";
 import { ApiError, clearModelFeedCache, getFeed, getModelFeed, recordEvent, type DataSource } from "@/lib/api";
-import { useFeedMode } from "@/lib/use-feed-mode";
 import { rankPosts } from "@/lib/ranking";
 import { useFlipReorder } from "@/lib/use-flip-reorder";
-import type { EvidenceExplanation, FeedMode, RankedPost } from "@/types";
+import type { EvidenceExplanation, RankedPost } from "@/types";
 
 type InteractionState = {
   liked: boolean;
@@ -18,9 +16,7 @@ type InteractionState = {
 };
 
 export function Feed() {
-  const [mode, setMode] = useFeedMode();
   const listRef = useRef<HTMLDivElement>(null);
-  const [loadedMode, setLoadedMode] = useState<FeedMode | null>(null);
   const [posts, setPosts] = useState<RankedPost[]>([]);
   const [disclaimer, setDisclaimer] = useState<string | null>(null);
   const [source, setSource] = useState<DataSource | null>(null);
@@ -37,27 +33,23 @@ export function Feed() {
     const controller = new AbortController();
     let active = true;
 
-    if (mode === "evidence" && postsRef.current.length === 0) {
-      getFeed("engagement", controller.signal)
+    if (postsRef.current.length === 0) {
+      getFeed("evidence", controller.signal)
         .then((result) => {
           if (!active) {
             return;
           }
           setPosts((current) => (current.length > 0 ? current : result.feed.posts));
-          setLoadedMode((current) => current ?? "engagement");
           setDisclaimer((current) => current ?? result.feed.disclaimer);
           setSource((current) => current ?? result.source);
           setPhase((current) => (current === "error" ? current : "ready"));
         })
         .catch(() => {
-          // The model request below reports a failure if the preview feed also fails.
+          // The model request below reports a failure if this preview also fails.
         });
     }
 
-    const feedRequest =
-      mode === "evidence"
-        ? getModelFeed()
-        : getFeed(mode, controller.signal).then((result) => ({ ...result, explanations: [] as EvidenceExplanation[] }));
+    const feedRequest = getModelFeed();
 
     feedRequest
       .then((result) => {
@@ -65,7 +57,6 @@ export function Feed() {
           return;
         }
         setPosts(result.feed.posts);
-        setLoadedMode(result.feed.mode);
         setDisclaimer(result.feed.disclaimer);
         setSource(result.source);
         setExplanations(Object.fromEntries(result.explanations.map((item) => [item.post_id, item])));
@@ -90,32 +81,9 @@ export function Feed() {
       active = false;
       controller.abort();
     };
-  }, [attempt, mode]);
+  }, [attempt]);
 
-  const capturePositions = useFlipReorder(listRef, `${loadedMode}:${posts.map((post) => post.id).join(",")}`);
-
-  function handleModeChange(next: FeedMode) {
-    if (next === mode) {
-      return;
-    }
-    capturePositions();
-    if (next === "evidence") {
-      clearModelFeedCache();
-    }
-    setPhase((current) => {
-      if (current === "error" || posts.length === 0) {
-        return "loading";
-      }
-      return "ready";
-    });
-    setRefreshing(true);
-    setMode(next);
-    void recordEvent({
-      event_type: "feed_mode_change",
-      feed_mode: next,
-      metadata: { from: mode },
-    });
-  }
+  useFlipReorder(listRef, posts.map((post) => post.id).join(","));
 
   async function handleLike(post: RankedPost) {
     const existing = interactions[post.id] ?? {
@@ -130,37 +98,21 @@ export function Feed() {
     const saved = await recordEvent({
       post_id: post.id,
       event_type: "like",
-      feed_mode: mode,
+      feed_mode: "evidence",
       metadata: { delta },
     });
     if (!saved) {
       setInteractions((current) => ({ ...current, [post.id]: existing }));
       return;
     }
-    if (mode === "evidence") {
-      setPosts((current) =>
-        rankPosts(
-          current.map((item) =>
-            item.id === post.id ? { ...item, likes: Math.max(0, item.likes + delta) } : item,
-          ),
-          "evidence",
-        ),
-      );
-      return;
-    }
-    try {
-      const result = await getFeed("engagement");
-      setPosts(result.feed.posts);
-      setLoadedMode(result.feed.mode);
-      setDisclaimer(result.feed.disclaimer);
-      setSource(result.source);
-    } catch {
-      setPosts((current) =>
+    setPosts((current) =>
+      rankPosts(
         current.map((item) =>
           item.id === post.id ? { ...item, likes: Math.max(0, item.likes + delta) } : item,
         ),
-      );
-    }
+        "evidence",
+      ),
+    );
   }
 
   async function handleShare(post: RankedPost) {
@@ -201,26 +153,14 @@ export function Feed() {
     }));
 
     if (shared) {
-      const saved = await recordEvent({ post_id: post.id, event_type: "share", feed_mode: mode });
-      if (saved && mode === "evidence") {
+      const saved = await recordEvent({ post_id: post.id, event_type: "share", feed_mode: "evidence" });
+      if (saved) {
         setPosts((current) =>
           rankPosts(
             current.map((item) => (item.id === post.id ? { ...item, shares: item.shares + 1 } : item)),
             "evidence",
           ),
         );
-      } else if (saved) {
-        try {
-          const result = await getFeed("engagement");
-          setPosts(result.feed.posts);
-          setLoadedMode(result.feed.mode);
-          setDisclaimer(result.feed.disclaimer);
-          setSource(result.source);
-        } catch {
-          setPosts((current) =>
-            current.map((item) => (item.id === post.id ? { ...item, shares: item.shares + 1 } : item)),
-          );
-        }
       }
     }
 
@@ -235,33 +175,23 @@ export function Feed() {
     }, 2000);
   }
 
-  const statusText =
-    phase === "loading"
-      ? "Loading feed"
-      : mode === "evidence"
-        ? "Showing the EvidenceRank feed"
-        : "Showing the engagement feed";
+  const statusText = phase === "loading" ? "Loading feed" : "Showing the EvidenceRank feed";
 
   return (
     <div className="space-y-4">
       <p className="text-sm leading-6 text-muted">
-        Claims come from public government pages. Likes and shares change the order. EvidenceRank asks gpt-4o-mini to label each claim, then applies the ranking formula.
+        EvidenceRank asks gpt-4o-mini to label each claim from the public pages, then applies the ranking formula.
+        Likes and shares still change the order.
       </p>
-      <div className="sticky top-16 z-10">
-        <FeedToggle mode={mode} onChange={handleModeChange} />
-      </div>
-      <RankingModeNote mode={mode} usingDemoFixtures={source === "demo"} usingModel={source === "model"} />
+      <RankingModeNote usingDemoFixtures={source === "demo"} usingModel={source === "model"} />
       <p className="sr-only" aria-live="polite">
         {refreshing ? "Updating feed" : statusText}
       </p>
 
-      {mode === "evidence" && phase !== "error" && source !== "model" ? (
+      {phase !== "error" && source !== "model" ? (
         <p className="text-sm leading-6 text-muted">
           gpt-4o-mini is labeling the feed from the public pages. The posts stay on screen while that finishes.
         </p>
-      ) : null}
-      {phase === "loading" && mode === "engagement" && posts.length === 0 ? (
-        <p className="text-sm leading-6 text-muted">Reading the public pages and building the feed.</p>
       ) : null}
       {phase === "loading" && posts.length === 0 ? (
         <div className="space-y-4" aria-hidden>
@@ -278,9 +208,7 @@ export function Feed() {
           <button
             type="button"
             onClick={() => {
-              if (mode === "evidence") {
-                clearModelFeedCache();
-              }
+              clearModelFeedCache();
               setPhase("loading");
               setError(null);
               setAttempt((current) => current + 1);
@@ -292,7 +220,7 @@ export function Feed() {
         </div>
       ) : null}
 
-      {phase !== "error" && posts.length > 0 && loadedMode ? (
+      {phase !== "error" && posts.length > 0 ? (
         <div className="space-y-4" aria-busy={refreshing}>
           {disclaimer ? <p className="text-xs leading-5 text-muted">{disclaimer}</p> : null}
           {source === "demo" ? (
@@ -314,7 +242,7 @@ export function Feed() {
                   <div key={post.id} data-flip-key={post.id}>
                     <PostCard
                       post={post}
-                      feedMode={loadedMode}
+                      feedMode="evidence"
                       explanation={explanations[post.id] ?? null}
                       liked={state?.liked ?? false}
                       shareNotice={state?.shareNotice ?? null}

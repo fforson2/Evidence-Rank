@@ -16,6 +16,7 @@ from app.config import settings
 from app.schemas.common import MODEL_DISCLAIMER, EvidenceStatus
 from app.schemas.evidence import Claim, EvidenceExplanation, EvidenceSource
 from app.schemas.post import Post, RankedPost
+from app.services.evidence_strength import score_post
 from app.services.rag import EvidenceIndex, ScoredChunk
 from app.services.ranking import rank_posts
 
@@ -209,6 +210,7 @@ class EvidencePipeline:
                 status="not_checkable",
                 explanation="The post did not contain a checkable factual claim, so it keeps its engagement score.",
                 sources=[],
+                hits=[],
             )
 
         main = checkable[0]
@@ -218,8 +220,9 @@ class EvidencePipeline:
                 post,
                 claim_text=main.text.strip(),
                 status="unresolved",
-                explanation="No passage in the demo corpus matched this claim closely enough to classify it.",
+                explanation="No passage in the public pages matched this claim closely enough to classify it.",
                 sources=[],
+                hits=[],
             )
 
         classification = self._model.classify(main.text, hits)
@@ -237,6 +240,7 @@ class EvidencePipeline:
                 status="unresolved",
                 explanation="The model did not cite a retrieved source, so the claim stays unresolved.",
                 sources=[],
+                hits=hits,
             )
         if not explanation:
             explanation = "The model left this claim unresolved."
@@ -253,7 +257,14 @@ class EvidencePipeline:
             )
             for source_id in cited_ids
         ]
-        return self._pack(post, claim_text=main.text.strip(), status=status, explanation=explanation, sources=sources)
+        return self._pack(
+            post,
+            claim_text=main.text.strip(),
+            status=status,
+            explanation=explanation,
+            sources=sources,
+            hits=hits,
+        )
 
     def _retrieve(self, claim: str) -> list[ScoredChunk]:
         vectors = self._model.embed([claim])
@@ -269,8 +280,19 @@ class EvidencePipeline:
         status: EvidenceStatus,
         explanation: str,
         sources: list[EvidenceSource],
+        hits: list[ScoredChunk],
     ) -> tuple[Post, EvidenceExplanation]:
-        updated = post.model_copy(update={"evidence_status": status, "review_status": "approved"})
+        updated = post.model_copy(
+            update={
+                "evidence_status": status,
+                "review_status": "approved",
+                "evidence_strength": score_post(
+                    status=status,
+                    hits=hits,
+                    cited_ids=[source.id for source in sources],
+                ),
+            }
+        )
         explanation_body = EvidenceExplanation(
             post_id=post.id,
             data_origin="model",

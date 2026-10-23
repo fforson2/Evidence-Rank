@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 
 from app.schemas.common import EvidenceStatus, PostType, ReviewStatus
+from app.schemas.strength import EvidenceStrength
 
 
 class Post(BaseModel):
@@ -15,6 +16,7 @@ class Post(BaseModel):
     shares: int = Field(ge=0)
     evidence_status: EvidenceStatus
     review_status: ReviewStatus
+    evidence_strength: EvidenceStrength | None = None
 
 
 class RankedPost(Post):

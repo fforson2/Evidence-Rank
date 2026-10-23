@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "EvidenceRank",
-  description: "Research prototype comparing an engagement feed with an evidence-aware feed.",
+  description: "Research prototype that ranks claims with EvidenceRank.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
