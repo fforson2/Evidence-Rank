@@ -1,0 +1,42 @@
+# .gitignore
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+.pnp
+.pnp.*
+.npm/
+.yarn/
+
+# Next.js
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Vercel
+.vercel
+
+# OS and editors
+.DS_Store
+.idea/
+.vscode/
+*.log
